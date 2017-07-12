@@ -5,31 +5,24 @@
 #include <string.h>
 #define FALSE   0
 
-struct Result{
-	float* data;
-	float* lat_data;
-	float* long_data;
-};
-typedef struct Result Result; 
-
 hid_t af_open(char* file_path);
 herr_t af_close(hid_t file);
-float* af_read(hid_t file, char* dataset_name);
+double* af_read(hid_t file, char* dataset_name);
 hsize_t* af_read_size(hid_t file, char* dataset_name);
 
-Result af_misr_handler(char* file_path, char* camera_angle, char* resolution, char* radiance);
-Result af_modis_handler(char* file_path, char* resolution, char* d_name);
+int af_misr_handler(char* file_path, char* camera_angle, char* resolution, char* radiance);
+int af_modis_handler(char* file_path, char* resolution, char* d_name);
 
 int alpha_compare(const void *a, const void *b);
 void concat_by_sep(char** source, const char** w, char* sep, size_t length, int arr_size);
 double dim_sum(hsize_t* dims, int arr_len);
+double float_to_double(float f);
 
 //Hard-coded information to test MISR IO operations
 char* dataset_name;
 
-Result af_misr_handler(char* file_path, char* camera_angle, char* resolution, char* radiance){
+int af_misr_handler(char* file_path, char* camera_angle, char* resolution, char* radiance){
 	//Path to dataset proccessing 
-	Result result;
 	char* instrument = "MISR";
 	char* d_fields = "Data_Fields";
 	char* location;
@@ -51,39 +44,39 @@ Result af_misr_handler(char* file_path, char* camera_angle, char* resolution, ch
 	hid_t file = af_open(file_path);
 	if(file < 0){
 		printf("File not found\n");
+		return -1;
 	}
 	/*Dimensions - 180 blocks, 512 x 2048 ordered in 1D Array*/
 	//Retrieve radiance dataset and dataspace
-	result.data = af_read(file, rad_dataset_name);
-	if(result.data == NULL){
-		return result;
+	double* data = af_read(file, rad_dataset_name);
+	if(data == NULL){
+		return -1;
 	}
-	printf("rad_data: %f\n", result.data[0]);
+	printf("rad_data: %f\n", data[0]);
 	
 	//Retrieve geolocation dataset and dataspace
 	char* lat_dataset_name;
 	concat_by_sep(&lat_dataset_name, arr2, "/", strlen(instrument) + strlen(location) + strlen(lat) + 4, 3);
-	result.lat_data = af_read(file, lat_dataset_name);
-	if(result.lat_data == NULL){
-		return result;
+	double* lat_data = af_read(file, lat_dataset_name);
+	if(lat_data == NULL){
+		return -1;
 	}
-	printf("lat_data: %f\n", result.lat_data[0]);
+	printf("lat_data: %f\n", lat_data[0]);
 	
 	char* long_dataset_name;
 	concat_by_sep(&long_dataset_name, arr3, "/", strlen(instrument) + strlen(location) + strlen(longitude) + 4, 3);
-	result.long_data = af_read(file, long_dataset_name);
-	if(result.long_data == NULL){
-		return result;
+	double* long_data = af_read(file, long_dataset_name);
+	if(long_data == NULL){
+		return -1;
 	}
-	printf("long_data: %f\n", result.long_data[0]);
+	printf("long_data: %f\n", long_data[0]);
     /* Close file */
     herr_t ret = af_close(file);
 	
-	return result;
+	return 0;
 }
 
-Result af_modis_handler(char* file_path, char* resolution, char* d_name){
-	Result result;
+int af_modis_handler(char* file_path, char* resolution, char* d_name){
 	//Path variables
 	char* instrument = "MODIS";
 	char* d_fields = "Data_Fields";
@@ -95,12 +88,13 @@ Result af_modis_handler(char* file_path, char* resolution, char* d_name){
 	hid_t file = af_open(file_path);
 	if(file < 0){
 		printf("File not found\n");
+		return -1;
 	}
 	//Get all granule file names
 	hid_t group = H5Gopen(file, instrument, H5P_DEFAULT);
 	if(group < 0){
 		printf("Group not found\n");
-		return result;
+		return -1;
 	}
 	hsize_t num_groups;
 	herr_t err = H5Gget_num_objs(group, &num_groups);
@@ -114,9 +108,9 @@ Result af_modis_handler(char* file_path, char* resolution, char* d_name){
 	}
 	
 	int h;
-	float* data;
-	float* lat_data;
-	float* long_data;
+	double* data;
+	double* lat_data;
+	double* long_data;
 	double curr_size;
 	double curr_lat_size;
 	double curr_long_size;
@@ -149,38 +143,49 @@ Result af_modis_handler(char* file_path, char* resolution, char* d_name){
 		}
 		else{
 			//retrieve next set of data and it's dimention
-			float* adding_data = af_read(file, dataset_name);
+			double* adding_data = af_read(file, dataset_name);
 			if(adding_data == NULL){
 				continue;
 			}
 			double new_d_size = dim_sum(af_read_size(file, dataset_name), 3);
-			float* adding_lat = af_read(file, lat_dataset_name);
+			double* adding_lat = af_read(file, lat_dataset_name);
 			double new_lat_size = dim_sum(af_read_size(file, lat_dataset_name), 2);
-			float* adding_long = af_read(file, long_dataset_name);
+			double* adding_long = af_read(file, long_dataset_name);
 			double new_long_size = dim_sum(af_read_size(file, long_dataset_name), 2);
 			
 			//Reallocating arrays of data
-			data = realloc(data, sizeof(float)*(curr_size + new_d_size));
-			memcpy(&data[(int)curr_size], adding_data, sizeof(float)*new_d_size);
+			data = realloc(data, sizeof(double)*(curr_size + new_d_size));
+			memcpy(&data[(int)curr_size], adding_data, sizeof(double)*new_d_size);
 			curr_size += new_d_size;
 
-			lat_data = realloc(lat_data, sizeof(float)*(curr_lat_size + new_lat_size));
-			memcpy(&lat_data[(int)curr_lat_size], adding_lat, sizeof(float)*new_lat_size);
+			lat_data = realloc(lat_data, sizeof(double)*(curr_lat_size + new_lat_size));
+			memcpy(&lat_data[(int)curr_lat_size], adding_lat, sizeof(double)*new_lat_size);
 			curr_lat_size += new_lat_size;
 			
-			long_data = realloc(long_data, sizeof(float)*(curr_long_size + new_long_size));
-			memcpy(&long_data[(int)curr_long_size], adding_long, sizeof(float)*new_long_size);
+			long_data = realloc(long_data, sizeof(double)*(curr_long_size + new_long_size));
+			memcpy(&long_data[(int)curr_long_size], adding_long, sizeof(double)*new_long_size);
 			curr_long_size += new_long_size;
+			
+			free(adding_data);
+			free(adding_lat);
+			free(adding_long);
 		}
 	}
 	
-	result.data = data;
-	result.lat_data = lat_data;
-	result.long_data = long_data;
+	/*Print statements to verify data's existence	
+	printf("test data: %f\n", data[0]);
+	printf("test_data (next_page): %f\n", data[2748620]);
+	printf("test data (next_granule): %f\n", data[41229300]);
+	printf("test data (last_granule): %f\n", data[453725399]);
+	printf("test_lat_data (next_granule): %f\n", lat_data[0]);
+	printf("test_lat_data (next_granule): %f\n", lat_data[2748620]);
+	printf("test_lat_data (next_granule): %f\n", lat_data[5510780]);
+	*/
+	
 	
 	herr_t ret = af_close(file);
 	
-	return result;
+	return 0;
 }
 
 hsize_t* af_read_size(hid_t file, char* dataset_name){
@@ -200,7 +205,7 @@ hsize_t* af_read_size(hid_t file, char* dataset_name){
 	return dims;
 }
 
-float* af_read(hid_t file, char* dataset_name){
+double* af_read(hid_t file, char* dataset_name){
 	hid_t dataset = H5Dopen2(file, dataset_name, H5P_DEFAULT);
 	if(dataset < 0){
 		printf("Dataset open error\n");
@@ -219,11 +224,18 @@ float* af_read(hid_t file, char* dataset_name){
 	hid_t dtype = H5Dget_type(dataset);
 	hid_t ndtype = H5Tget_native_type(dtype, H5T_DIR_DESCEND);
 	float * data = calloc ( dim_sum(dims, sizeof(dims)/sizeof(hsize_t)) , sizeof(ndtype) );
+	double* converted_data = calloc ( dim_sum(dims, sizeof(dims)/sizeof(hsize_t)) , sizeof(double) );
+	
 	herr_t status = H5Dread(dataset, ndtype, memspace, memspace, H5P_DEFAULT, data);
+	int i;
+	for(i=0;i < dim_sum(dims, sizeof(dims)/sizeof(hsize_t)); i++){
+		converted_data[i] = float_to_double(data[i]);
+	}
+	free(data);	
 	close(dtype);
 	close(ndtype);
 	printf("read status: %d\n", status);
-	return data;
+	return converted_data;
 }
 
 hid_t af_open(char* file_path){
@@ -238,7 +250,6 @@ herr_t af_close(hid_t file){
 
 int main (int argc, char *argv[]){
 	//Preset filename here for easy testing 
-	Result data_result;
 	char* file_path = "/projects/TDataFus/kent/temp/40-orbit-file/Jun15.2/TERRA_BF_L1B_O69365_F000_V000.h5";
 	argv[1] = file_path;
 	if(argc < 3){
@@ -252,7 +263,7 @@ int main (int argc, char *argv[]){
 		}
 		else{
 			//MISR input requirements fulfilled 
-			data_result = af_misr_handler(argv[1], argv[3], argv[4], argv[5]);
+			af_misr_handler(argv[1], argv[3], argv[4], argv[5]);
 			return 0;
 		}
 	}
@@ -278,17 +289,7 @@ int main (int argc, char *argv[]){
 			else{
 				printf("Wrong resolution, choose from 1KM, 500M or 250M\n");
 			}
-			data_result = af_modis_handler(argv[1], resolution, d_name);
-			
-			/* For data_result validation
-			printf("test data: %f\n", data_result.data[0]);
-			printf("test_data (next_page): %f\n", data_result.data[2748620]);
-			printf("test data (next_granule): %f\n", data_result.data[41229300]);
-			printf("test data (last_granule): %f\n", data_result.data[453725399]);
-			printf("test_lat_data (next_granule): %f\n", data_result.lat_data[0]);
-			printf("test_lat_data (next_granule): %f\n", data_result.lat_data[2748620]);
-			printf("test_lat_data (next_granule): %f\n", data_result.lat_data[5510780]);
-			*/
+			af_modis_handler(argv[1], resolution, d_name);
 		}
 	}
 
@@ -324,4 +325,10 @@ double dim_sum(hsize_t* dims, int arr_len){
 		}
 	}
 	return sum;
+}
+//Turning float to double
+double float_to_double(float f){
+	char buf[50];
+	sprintf(buf, "%.7g", f);
+	return atof(buf);
 }
