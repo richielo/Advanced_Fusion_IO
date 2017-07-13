@@ -8,21 +8,23 @@
 hid_t af_open(char* file_path);
 herr_t af_close(hid_t file);
 double* af_read(hid_t file, char* dataset_name);
+double* af_read_hyperslab(hid_t file, char*dataset_name, int x_offset, int y_offset, int z_offset);
 hsize_t* af_read_size(hid_t file, char* dataset_name);
 
 int af_misr_handler(char* file_path, char* camera_angle, char* resolution, char* radiance);
 int af_modis_handler(char* file_path, char* resolution, char* d_name);
 
-int alpha_compare(const void *a, const void *b);
 void concat_by_sep(char** source, const char** w, char* sep, size_t length, int arr_size);
 double dim_sum(hsize_t* dims, int arr_len);
 double float_to_double(float f);
-
-//Hard-coded information to test MISR IO operations
-char* dataset_name;
+double misr_averaging(double window[16]);
 
 int af_misr_handler(char* file_path, char* camera_angle, char* resolution, char* radiance){
+	/*
+	data - 
+	*/
 	//Path to dataset proccessing 
+	int down_sampling = 0;
 	char* instrument = "MISR";
 	char* d_fields = "Data_Fields";
 	char* location;
@@ -37,45 +39,112 @@ int af_misr_handler(char* file_path, char* camera_angle, char* resolution, char*
 	const char* arr[] = {instrument, camera_angle, d_fields, radiance};
 	const char* arr2[] = {instrument, location, lat};
 	const char* arr3[] = {instrument, location, longitude};
-	char* rad_dataset_name;
-	concat_by_sep(&rad_dataset_name, arr, "/", strlen(instrument) + strlen(camera_angle) + strlen(d_fields) + strlen(radiance) + 4, 4);
-
+	
 	//Open file
 	hid_t file = af_open(file_path);
 	if(file < 0){
 		printf("File not found\n");
 		return -1;
 	}
+	
+	//Dataset names parsing
+	char* rad_dataset_name;
+	concat_by_sep(&rad_dataset_name, arr, "/", strlen(instrument) + strlen(camera_angle) + strlen(d_fields) + strlen(radiance) + 4, 4);
+	char* lat_dataset_name;
+	concat_by_sep(&lat_dataset_name, arr2, "/", strlen(instrument) + strlen(location) + strlen(lat) + 4, 3);
+	char* long_dataset_name;
+	concat_by_sep(&long_dataset_name, arr3, "/", strlen(instrument) + strlen(location) + strlen(longitude) + 4, 3);
+	
+	//Check for correct specification
+	if(strcmp(camera_angle, "AN") != 0 && strcmp(radiance, "Red_Radiance") != 0 && strcmp(resolution, "H") == 0){
+		printf("Error: Your specification does not support high resolution.\n");
+		return -1;
+	}
+	else if((strcmp(camera_angle, "AN") == 0 || strcmp(radiance, "Red_Radiance") == 0) && strcmp(resolution, "L") == 0){
+		//Downsampling has to be done
+		down_sampling = 1;
+	}
+	
+	//Normal reading can be done below this line
+	printf("Reading MISR\n");
 	/*Dimensions - 180 blocks, 512 x 2048 ordered in 1D Array*/
 	//Retrieve radiance dataset and dataspace
 	double* data = af_read(file, rad_dataset_name);
 	if(data == NULL){
 		return -1;
 	}
-	printf("rad_data: %f\n", data[0]);
+	printf("Reading successful\n");
+	//Variable containing down sampled data
+	double* down_data;
+	if(down_sampling == 1){
+		printf("Undergoing downsampling\n");
+		hsize_t* dims = af_read_size(file, rad_dataset_name);
+		down_data = malloc(dims[0] * (dims[1]/4) * (dims[2]/4) * sizeof(double));
+		int i, j, k;
+		for(i = 0; i < dims[0]; i++){
+			for(j = 0; j < dims[1]; j = j + 4){
+				for(k = 0; k < dims[2]; k = k + 4){
+					//Retrieving 4x4 window for averaging
+					//Formula for converting i, j and k to index in data array
+					//int index = i*dims[1]*dims[2] + j*dims[2] + k;
+					int a,b;
+					int max_x = j + 4;
+					int max_z = k + 4; 
+					int* index_array = malloc(16*sizeof(int));
+					int index_iter = 0;
+					for(a = j; a < max_x; a++){
+						for(b = k; b < max_z; b++){
+							index_array[index_iter] = i*dims[1]*dims[2] + a*dims[2] + b;
+							index_iter += 1;
+						}
+					}
+					double* window = malloc(16*sizeof(double));
+					int c;
+					for(c = 0; c < 16; c++){
+						window[c] = data[index_array[c]];
+					}
+					//Window Retrieved, get average and assign to new data grid
+					double average = misr_averaging(window);
+					int new_index = i*dims[1]/4*dims[2]/4 + (j/4)*dims[2]/4 + k/4;
+					down_data[new_index] = average;
+					free(index_array);
+					free(window);
+				}
+			}
+		}
+		free(data);
+		printf("Downsampling done\n");
+	}
 	
+	printf("Retrieveing Geolocation data for MISR\n");
 	//Retrieve geolocation dataset and dataspace
-	char* lat_dataset_name;
-	concat_by_sep(&lat_dataset_name, arr2, "/", strlen(instrument) + strlen(location) + strlen(lat) + 4, 3);
 	double* lat_data = af_read(file, lat_dataset_name);
 	if(lat_data == NULL){
 		return -1;
 	}
-	printf("lat_data: %f\n", lat_data[0]);
 	
-	char* long_dataset_name;
-	concat_by_sep(&long_dataset_name, arr3, "/", strlen(instrument) + strlen(location) + strlen(longitude) + 4, 3);
 	double* long_data = af_read(file, long_dataset_name);
 	if(long_data == NULL){
 		return -1;
 	}
+	
+	//Validate data's existence
+	if(down_sampling == 1){
+		printf("rad_data: %f\n", down_data[0]);
+	}
+	else{
+		printf("rad_data: %f\n", data[0]);	
+	}
+	printf("lat_data: %f\n", lat_data[0]);
 	printf("long_data: %f\n", long_data[0]);
+	
     /* Close file */
     herr_t ret = af_close(file);
 	
 	return 0;
 }
 
+//TODO parallel the reading process
 int af_modis_handler(char* file_path, char* resolution, char* d_name){
 	//Path variables
 	char* instrument = "MODIS";
@@ -200,9 +269,48 @@ hsize_t* af_read_size(hid_t file, char* dataset_name){
 		return NULL;	
 	}
 	const int ndims = H5Sget_simple_extent_ndims(dataspace);
+	hsize_t* dims = malloc(sizeof(hsize_t) * ndims);
+	H5Sget_simple_extent_dims(dataspace, dims, NULL);
+	H5Dclose(dataset);	
+	H5Sclose(dataspace);
+	return dims;
+}
+
+//No longer used
+double* af_read_hyperslab(hid_t file, char*dataset_name, int x_offset, int y_offset, int z_offset){
+	herr_t status;
+	float* data_out = calloc(16, sizeof(float));
+	double* converted_data;
+	hid_t dataset = H5Dopen2(file, dataset_name, H5P_DEFAULT);
+	if(dataset < 0){
+		printf("Dataset open error\n");
+		return NULL; 
+	}
+	hid_t dataspace = H5Dget_space(dataset);
+	if(dataspace < 0){
+		printf("Dataspace open error\n");
+		return NULL;	
+	}
+	const int ndims = H5Sget_simple_extent_ndims(dataspace);
 	hsize_t dims[ndims];
 	H5Sget_simple_extent_dims(dataspace, dims, NULL);
-	return dims;
+	hsize_t offset[3] = {x_offset, y_offset, z_offset};
+	hsize_t count[3] = {1, 4, 4};
+	status = H5Sselect_hyperslab(dataspace, H5S_SELECT_SET, offset, NULL, count, NULL);
+	printf("select hyperslab_status: %d\n");
+	int rank = 1;
+	const hsize_t length[1] = {16};
+	hsize_t m_offset[1] = {0};
+	hsize_t m_count[1] = {16};
+	hid_t memspace = H5Screate_simple(rank, length, NULL);
+	H5Sselect_hyperslab(memspace, H5S_SELECT_SET, m_offset, NULL, m_count, NULL);
+	status = H5Dread(dataset, H5T_NATIVE_FLOAT, memspace, dataspace, H5P_DEFAULT, data_out);
+	printf("read hyperslab_status: %d\n");
+	int k;
+	H5Dclose(dataset);	
+	H5Sclose(dataspace);
+	H5Sclose(memspace);
+	return converted_data;
 }
 
 double* af_read(hid_t file, char* dataset_name){
@@ -231,10 +339,14 @@ double* af_read(hid_t file, char* dataset_name){
 	for(i=0;i < dim_sum(dims, sizeof(dims)/sizeof(hsize_t)); i++){
 		converted_data[i] = float_to_double(data[i]);
 	}
-	free(data);	
-	close(dtype);
-	close(ndtype);
-	printf("read status: %d\n", status);
+	free(data);
+	H5Dclose(dataset);	
+	H5Sclose(dataspace);
+	H5Tclose(dtype);
+	H5Tclose(ndtype);
+	if(status < 0){
+		printf("read error: %d\n", status);
+	}
 	return converted_data;
 }
 
@@ -331,4 +443,20 @@ double float_to_double(float f){
 	char buf[50];
 	sprintf(buf, "%.7g", f);
 	return atof(buf);
+}
+
+double misr_averaging(double window[16]){
+	double sum = 0.0;
+	double count = 0.0;
+	int i;
+	for(i = 0; i < 16; i++){
+		if(window[i] < 0){
+			return -999.0;
+		}
+		else{
+			sum += window[i];
+			count += 1;
+		}
+	}
+	return sum/count;
 }
