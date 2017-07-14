@@ -1,3 +1,8 @@
+/*
+Author: Yat Long Lo
+Email: yllo2@illinois.edu
+*/
+
 #include <hdf5.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -5,73 +10,53 @@
 #include <string.h>
 #define FALSE   0
 
+//HDF5 API operations wrapper
 hid_t af_open(char* file_path);
 herr_t af_close(hid_t file);
 double* af_read(hid_t file, char* dataset_name);
 double* af_read_hyperslab(hid_t file, char*dataset_name, int x_offset, int y_offset, int z_offset);
 hsize_t* af_read_size(hid_t file, char* dataset_name);
 
-int af_misr_handler(char* file_path, char* camera_angle, char* resolution, char* radiance);
-int af_modis_handler(char* file_path, char* resolution, char* d_name);
+//Instrument data retrieval functions
+double* get_misr_rad(hid_t file, char* camera_angle, char* resolution, char* radiance);
+double* get_misr_lat(hid_t file, char* resolution);
+double* get_misr_long(hid_t file, char* resolution);
+double* get_modis_rad(hid_t file, char* resolution, char* d_name);
+double* get_modis_lat(hid_t file, char* resolution);
+double* get_modis_long(hid_t file, char* resolution);
 
+//Helper functions
 void concat_by_sep(char** source, const char** w, char* sep, size_t length, int arr_size);
 double dim_sum(hsize_t* dims, int arr_len);
 double float_to_double(float f);
 double misr_averaging(double window[16]);
 
-int af_misr_handler(char* file_path, char* camera_angle, char* resolution, char* radiance){
-	/*
-	data - 
-	*/
+double* get_misr_rad(hid_t file, char* camera_angle, char* resolution, char* radiance){
 	//Path to dataset proccessing 
 	int down_sampling = 0;
 	char* instrument = "MISR";
 	char* d_fields = "Data_Fields";
-	char* location;
-	if(strcmp(resolution, "H") == 0){
-		location = "HRGeolocation";
-	}
-	else{
-		location = "Geolocation";
-	}
-	char* lat = "GeoLatitude";
-	char* longitude = "GeoLongitude";
 	const char* arr[] = {instrument, camera_angle, d_fields, radiance};
-	const char* arr2[] = {instrument, location, lat};
-	const char* arr3[] = {instrument, location, longitude};
 	
-	//Open file
-	hid_t file = af_open(file_path);
-	if(file < 0){
-		printf("File not found\n");
-		return -1;
-	}
-	
-	//Dataset names parsing
+	//Dataset name parsing
 	char* rad_dataset_name;
 	concat_by_sep(&rad_dataset_name, arr, "/", strlen(instrument) + strlen(camera_angle) + strlen(d_fields) + strlen(radiance) + 4, 4);
-	char* lat_dataset_name;
-	concat_by_sep(&lat_dataset_name, arr2, "/", strlen(instrument) + strlen(location) + strlen(lat) + 4, 3);
-	char* long_dataset_name;
-	concat_by_sep(&long_dataset_name, arr3, "/", strlen(instrument) + strlen(location) + strlen(longitude) + 4, 3);
-	
-	//Check for correct specification
+		//Check for correct specification
 	if(strcmp(camera_angle, "AN") != 0 && strcmp(radiance, "Red_Radiance") != 0 && strcmp(resolution, "H") == 0){
 		printf("Error: Your specification does not support high resolution.\n");
-		return -1;
+		return NULL;
 	}
 	else if((strcmp(camera_angle, "AN") == 0 || strcmp(radiance, "Red_Radiance") == 0) && strcmp(resolution, "L") == 0){
 		//Downsampling has to be done
 		down_sampling = 1;
 	}
 	
-	//Normal reading can be done below this line
 	printf("Reading MISR\n");
 	/*Dimensions - 180 blocks, 512 x 2048 ordered in 1D Array*/
 	//Retrieve radiance dataset and dataspace
 	double* data = af_read(file, rad_dataset_name);
 	if(data == NULL){
-		return -1;
+		return NULL;
 	}
 	printf("Reading successful\n");
 	//Variable containing down sampled data
@@ -116,54 +101,146 @@ int af_misr_handler(char* file_path, char* camera_angle, char* resolution, char*
 		printf("Downsampling done\n");
 	}
 	
-	printf("Retrieveing Geolocation data for MISR\n");
-	//Retrieve geolocation dataset and dataspace
-	double* lat_data = af_read(file, lat_dataset_name);
-	if(lat_data == NULL){
-		return -1;
-	}
-	
-	double* long_data = af_read(file, long_dataset_name);
-	if(long_data == NULL){
-		return -1;
-	}
-	
-	//Validate data's existence
 	if(down_sampling == 1){
 		printf("rad_data: %f\n", down_data[0]);
+		return down_data;
 	}
 	else{
-		printf("rad_data: %f\n", data[0]);	
+		printf("rad_data: %f\n", data[0]);
+		return data;	
 	}
-	printf("lat_data: %f\n", lat_data[0]);
-	printf("long_data: %f\n", long_data[0]);
 	
-    /* Close file */
-    herr_t ret = af_close(file);
-	
-	return 0;
 }
 
-//TODO parallel the reading process
-int af_modis_handler(char* file_path, char* resolution, char* d_name){
-	//Path variables
+double* get_misr_lat(hid_t file, char* resolution){
+	//Path to dataset proccessing 
+	char* instrument = "MISR";
+	char* location;
+	if(strcmp(resolution, "H") == 0){
+		location = "HRGeolocation";
+	}
+	else{
+		location = "Geolocation";
+	}
+	char* lat = "GeoLatitude";
+	const char* arr2[] = {instrument, location, lat};
+	
+	//Dataset names parsing
+	char* lat_dataset_name;
+	concat_by_sep(&lat_dataset_name, arr2, "/", strlen(instrument) + strlen(location) + strlen(lat) + 4, 3);
+	
+	printf("Retrieveing latitude data for MISR\n");
+	//Retrieve latitude dataset and dataspace
+	double* lat_data = af_read(file, lat_dataset_name);
+	if(lat_data == NULL){
+		return NULL;
+	}
+	printf("lat_data: %f\n", lat_data[0]);
+	return lat_data;
+}
+
+double* get_misr_long(hid_t file, char* resolution){
+	//Path to dataset proccessing 
+	char* instrument = "MISR";
+	char* location;
+	if(strcmp(resolution, "H") == 0){
+		location = "HRGeolocation";
+	}
+	else{
+		location = "Geolocation";
+	}
+	char* longitude = "GeoLongitude";
+	const char* arr3[] = {instrument, location, longitude};
+	
+	//Dataset names parsing
+	char* long_dataset_name;
+	concat_by_sep(&long_dataset_name, arr3, "/", strlen(instrument) + strlen(location) + strlen(longitude) + 4, 3);
+	
+	printf("Retrieveing longitude data for MISR\n");
+	//Retrieve longitude dataset and dataspace
+	double* long_data = af_read(file, long_dataset_name);
+	if(long_data == NULL){
+		return NULL;
+	}
+	printf("long_data: %f\n", long_data[0]);
+	return long_data;
+}
+
+double* get_modis_rad(hid_t file, char* resolution, char* d_name){
+	printf("Reading MODIS rad\n");
 	char* instrument = "MODIS";
 	char* d_fields = "Data_Fields";
+	//Get all granule file names
+	printf("Retrieving granule group names");
+	hid_t group = H5Gopen(file, instrument, H5P_DEFAULT);
+	if(group < 0){
+		printf("Group not found\n");
+		return NULL;
+	}
+	hsize_t num_groups;
+	herr_t err = H5Gget_num_objs(group, &num_groups);
+	char* names[(int)num_groups][20];
+	int i;
+	for(i = 0; i < num_groups; i++){
+		char* name = malloc(20*sizeof(char));
+		H5Gget_objname_by_idx(group, (hsize_t)i, name, 20);
+		strcpy(&names[i], name);
+		free(name);
+	}
+	int h;
+	double* data;
+	double curr_size;
+	int read_first = -1;
+	for(h = 0; h < num_groups; h++){
+		//Path formation
+		char* name = names[h];
+		const char* d_arr[] = {instrument, name, resolution, d_fields, d_name};
+		char* dataset_name;
+		concat_by_sep(&dataset_name, d_arr, "/", strlen(instrument) + strlen(name) + strlen(resolution) + strlen(d_fields) + strlen(d_name), 5);
+		printf("granule_name: %s\n", name);
+		if(read_first < 0){
+			data = af_read(file, dataset_name);
+			if(data == NULL){
+				continue;
+			}
+			curr_size = dim_sum(af_read_size(file, dataset_name), 3); 
+			read_first = 1;
+		}
+		else{
+			//retrieve next set of data and it's dimention
+			double* adding_data = af_read(file, dataset_name);
+			if(adding_data == NULL){
+				continue;
+			}
+			double new_d_size = dim_sum(af_read_size(file, dataset_name), 3);
+			
+			//Reallocating arrays of data
+			data = realloc(data, sizeof(double)*(curr_size + new_d_size));
+			memcpy(&data[(int)curr_size], adding_data, sizeof(double)*new_d_size);
+			curr_size += new_d_size;
+			
+			free(adding_data);
+		}
+	}
+	//Print statements to verify data's existence	
+	printf("test data: %f\n", data[0]);
+	printf("test_data (next_page): %f\n", data[2748620]);
+	printf("test data (next_granule): %f\n", data[41229300]);
+	return data;
+}
+
+double* get_modis_lat(hid_t file, char* resolution){
+	printf("Reading MODIS lat\n");
+	//Path variables
+	char* instrument = "MODIS";
 	char* location = "Geolocation";
 	char* lat = "Latitude";
-	char* longitude = "Longitude";
 	
-	//Open file
-	hid_t file = af_open(file_path);
-	if(file < 0){
-		printf("File not found\n");
-		return -1;
-	}
 	//Get all granule file names
 	hid_t group = H5Gopen(file, instrument, H5P_DEFAULT);
 	if(group < 0){
 		printf("Group not found\n");
-		return -1;
+		return NULL;
 	}
 	hsize_t num_groups;
 	herr_t err = H5Gget_num_objs(group, &num_groups);
@@ -177,85 +254,98 @@ int af_modis_handler(char* file_path, char* resolution, char* d_name){
 	}
 	
 	int h;
-	double* data;
 	double* lat_data;
-	double* long_data;
-	double curr_size;
 	double curr_lat_size;
+	int read_first = -1;
+	for(h = 0; h < num_groups; h++){
+		//Path formation
+		char* name = names[h];
+		const char* lat_arr[] = {instrument, name, resolution, location, lat};
+		char* lat_dataset_name;
+		concat_by_sep(&lat_dataset_name, lat_arr, "/", strlen(instrument) + strlen(name) + strlen(resolution) + strlen(location) + strlen(lat), 5);
+		printf("granule_name: %s\n", name);
+		if(read_first < 0){
+			curr_lat_size = dim_sum(af_read_size(file, lat_dataset_name), 2);
+			lat_data = af_read(file, lat_dataset_name);
+			read_first = 1;
+		}
+		else{
+			//retrieve next set of data and it's dimention
+			double* adding_lat = af_read(file, lat_dataset_name);
+			double new_lat_size = dim_sum(af_read_size(file, lat_dataset_name), 2);
+			
+			//Reallocating arrays of data
+			lat_data = realloc(lat_data, sizeof(double)*(curr_lat_size + new_lat_size));
+			memcpy(&lat_data[(int)curr_lat_size], adding_lat, sizeof(double)*new_lat_size);
+			curr_lat_size += new_lat_size;
+			
+			free(adding_lat);
+		}
+	}
+	printf("test_lat_data (next_granule): %f\n", lat_data[0]);
+	printf("test_lat_data (next_granule): %f\n", lat_data[2748620]);
+	printf("test_lat_data (next_granule): %f\n", lat_data[5510780]);
+	return lat_data;
+}
+double* get_modis_long(hid_t file, char* resolution){
+	printf("Reading MODIS long\n");
+	//Path variables
+	char* instrument = "MODIS";
+	char* location = "Geolocation";
+	char* longitude = "Longitude";
+	
+	//Get all granule file names
+	hid_t group = H5Gopen(file, instrument, H5P_DEFAULT);
+	if(group < 0){
+		printf("Group not found\n");
+		return NULL;
+	}
+	hsize_t num_groups;
+	herr_t err = H5Gget_num_objs(group, &num_groups);
+	char* names[(int)num_groups][20];
+	int i;
+	for(i = 0; i < num_groups; i++){
+		char* name = malloc(20*sizeof(char));
+		H5Gget_objname_by_idx(group, (hsize_t)i, name, 20);
+		strcpy(&names[i], name);
+		free(name);
+	}
+	
+	int h;
+	double* long_data;
 	double curr_long_size;
 	int read_first = -1;
 	for(h = 0; h < num_groups; h++){
 		//Path formation
 		char* name = names[h];
-		const char* d_arr[] = {instrument, name, resolution, d_fields, d_name};
-		const char* lat_arr[] = {instrument, name, resolution, location, lat};
 		const char* long_arr[] = {instrument, name, resolution, location, longitude};
-		char* dataset_name;
-		concat_by_sep(&dataset_name, d_arr, "/", strlen(instrument) + strlen(name) + strlen(resolution) + strlen(d_fields) + strlen(d_name), 5);
-		char* lat_dataset_name;
-		concat_by_sep(&lat_dataset_name, lat_arr, "/", strlen(instrument) + strlen(name) + strlen(resolution) + strlen(location) + strlen(lat), 5);
 		char* long_dataset_name;
 		concat_by_sep(&long_dataset_name, long_arr, "/", strlen(instrument) + strlen(name) + strlen(resolution) + strlen(location) + strlen(longitude), 5);
 		printf("granule_name: %s\n", name);
 		if(read_first < 0){
-			data = af_read(file, dataset_name);
-			if(data == NULL){
-				continue;
-			}
-			curr_size = dim_sum(af_read_size(file, dataset_name), 3); 
-			data = af_read(file, dataset_name);
-			curr_lat_size = dim_sum(af_read_size(file, lat_dataset_name), 2);
-			lat_data = af_read(file, lat_dataset_name);
 			curr_long_size = dim_sum(af_read_size(file, long_dataset_name), 2);
 			long_data = af_read(file, long_dataset_name);
 			read_first = 1;
 		}
 		else{
 			//retrieve next set of data and it's dimention
-			double* adding_data = af_read(file, dataset_name);
-			if(adding_data == NULL){
-				continue;
-			}
-			double new_d_size = dim_sum(af_read_size(file, dataset_name), 3);
-			double* adding_lat = af_read(file, lat_dataset_name);
-			double new_lat_size = dim_sum(af_read_size(file, lat_dataset_name), 2);
 			double* adding_long = af_read(file, long_dataset_name);
 			double new_long_size = dim_sum(af_read_size(file, long_dataset_name), 2);
 			
 			//Reallocating arrays of data
-			data = realloc(data, sizeof(double)*(curr_size + new_d_size));
-			memcpy(&data[(int)curr_size], adding_data, sizeof(double)*new_d_size);
-			curr_size += new_d_size;
-
-			lat_data = realloc(lat_data, sizeof(double)*(curr_lat_size + new_lat_size));
-			memcpy(&lat_data[(int)curr_lat_size], adding_lat, sizeof(double)*new_lat_size);
-			curr_lat_size += new_lat_size;
-			
 			long_data = realloc(long_data, sizeof(double)*(curr_long_size + new_long_size));
 			memcpy(&long_data[(int)curr_long_size], adding_long, sizeof(double)*new_long_size);
 			curr_long_size += new_long_size;
-			
-			free(adding_data);
-			free(adding_lat);
+
 			free(adding_long);
 		}
 	}
-	
-	/*Print statements to verify data's existence	
-	printf("test data: %f\n", data[0]);
-	printf("test_data (next_page): %f\n", data[2748620]);
-	printf("test data (next_granule): %f\n", data[41229300]);
-	printf("test data (last_granule): %f\n", data[453725399]);
-	printf("test_lat_data (next_granule): %f\n", lat_data[0]);
-	printf("test_lat_data (next_granule): %f\n", lat_data[2748620]);
-	printf("test_lat_data (next_granule): %f\n", lat_data[5510780]);
-	*/
-	
-	
-	herr_t ret = af_close(file);
-	
-	return 0;
+	printf("test_long_data (next_granule): %f\n", long_data[0]);
+	printf("test_long_data (next_granule): %f\n", long_data[2748620]);
+	printf("test_long_data (next_granule): %f\n", long_data[5510780]);
+	return long_data;
 }
+
 
 hsize_t* af_read_size(hid_t file, char* dataset_name){
 	hid_t dataset = H5Dopen2(file, dataset_name, H5P_DEFAULT);
@@ -274,43 +364,6 @@ hsize_t* af_read_size(hid_t file, char* dataset_name){
 	H5Dclose(dataset);	
 	H5Sclose(dataspace);
 	return dims;
-}
-
-//No longer used
-double* af_read_hyperslab(hid_t file, char*dataset_name, int x_offset, int y_offset, int z_offset){
-	herr_t status;
-	float* data_out = calloc(16, sizeof(float));
-	double* converted_data;
-	hid_t dataset = H5Dopen2(file, dataset_name, H5P_DEFAULT);
-	if(dataset < 0){
-		printf("Dataset open error\n");
-		return NULL; 
-	}
-	hid_t dataspace = H5Dget_space(dataset);
-	if(dataspace < 0){
-		printf("Dataspace open error\n");
-		return NULL;	
-	}
-	const int ndims = H5Sget_simple_extent_ndims(dataspace);
-	hsize_t dims[ndims];
-	H5Sget_simple_extent_dims(dataspace, dims, NULL);
-	hsize_t offset[3] = {x_offset, y_offset, z_offset};
-	hsize_t count[3] = {1, 4, 4};
-	status = H5Sselect_hyperslab(dataspace, H5S_SELECT_SET, offset, NULL, count, NULL);
-	printf("select hyperslab_status: %d\n");
-	int rank = 1;
-	const hsize_t length[1] = {16};
-	hsize_t m_offset[1] = {0};
-	hsize_t m_count[1] = {16};
-	hid_t memspace = H5Screate_simple(rank, length, NULL);
-	H5Sselect_hyperslab(memspace, H5S_SELECT_SET, m_offset, NULL, m_count, NULL);
-	status = H5Dread(dataset, H5T_NATIVE_FLOAT, memspace, dataspace, H5P_DEFAULT, data_out);
-	printf("read hyperslab_status: %d\n");
-	int k;
-	H5Dclose(dataset);	
-	H5Sclose(dataspace);
-	H5Sclose(memspace);
-	return converted_data;
 }
 
 double* af_read(hid_t file, char* dataset_name){
@@ -363,6 +416,7 @@ herr_t af_close(hid_t file){
 int main (int argc, char *argv[]){
 	//Preset filename here for easy testing 
 	char* file_path = "/projects/TDataFus/kent/temp/40-orbit-file/Jun15.2/TERRA_BF_L1B_O69365_F000_V000.h5";
+	hid_t file;
 	argv[1] = file_path;
 	if(argc < 3){
 		printf("Usage: %s filename instrument_name extra_arguments\n", argv[0]);
@@ -375,8 +429,21 @@ int main (int argc, char *argv[]){
 		}
 		else{
 			//MISR input requirements fulfilled 
-			af_misr_handler(argv[1], argv[3], argv[4], argv[5]);
-			return 0;
+			//Open file
+			file = af_open(file_path);
+			if(file < 0){
+				printf("File not found\n");
+				return -1;
+			}
+			double* data = get_misr_rad(file, argv[3], argv[4], argv[5]);
+			double* lat_data = get_misr_lat(file, argv[4]);
+			double* long_data = get_misr_long(file, argv[4]);
+			if(data != NULL && lat_data != NULL, long_data != NULL){
+				printf("MISR retrieval successful\n");
+			}
+			else{
+				printf("MISR retrieval failed\n");
+			}
 		}
 	}
 	else if(strcmp(argv[2], "MODIS") == 0){
@@ -384,6 +451,11 @@ int main (int argc, char *argv[]){
 			printf("MODIS Usage: %s filename MODIS resolution(1KM/500m/250m)\n", argv[0]);
 		}
 		else{
+			file = af_open(file_path);
+			if(file < 0){
+				printf("File not found\n");
+				return -1;
+			}
 			char* resolution = argv[3];
 			char* d_name = "";
 			if(strcmp(resolution, "1KM") == 0){
@@ -401,10 +473,20 @@ int main (int argc, char *argv[]){
 			else{
 				printf("Wrong resolution, choose from 1KM, 500M or 250M\n");
 			}
-			af_modis_handler(argv[1], resolution, d_name);
+			double* data = get_modis_rad(file, resolution, d_name);
+			double* lat_data = get_modis_lat(file, resolution);
+			double* long_data = get_modis_long(file, resolution);
+			if(data != NULL && lat_data != NULL, long_data != NULL){
+				printf("MODIS retrieval successful\n");
+			}
+			else{
+				printf("MODIS retrieval failed\n");
+			}
 		}
 	}
 
+	herr_t ret = af_close(file);
+	
 	return 0;
 }
 
