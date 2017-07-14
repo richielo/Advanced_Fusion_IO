@@ -1,0 +1,9 @@
+Commands to test MISR:
+
+./af_io_test test MISR AA L NIR_Radiance
+
+For MISR downsampling test:
+./af_io_test test MISR AN L Blue_Radiance
+
+Commands to test MODIS:
+/.af_io_test test MODIS 1KM
