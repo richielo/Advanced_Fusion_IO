@@ -22,8 +22,8 @@ double* get_misr_rad(hid_t file, char* camera_angle, char* resolution, char* rad
 double* get_misr_lat(hid_t file, char* resolution);
 double* get_misr_long(hid_t file, char* resolution);
 double* get_modis_rad(hid_t file, char* resolution, char* d_name);
-double* get_modis_lat(hid_t file, char* resolution);
-double* get_modis_long(hid_t file, char* resolution);
+double* get_modis_lat(hid_t file, char* resolution, char* d_name);
+double* get_modis_long(hid_t file, char* resolution, char* d_name);
 
 //Helper functions
 void concat_by_sep(char** source, const char** w, char* sep, size_t length, int arr_size);
@@ -171,7 +171,7 @@ double* get_modis_rad(hid_t file, char* resolution, char* d_name){
 	char* instrument = "MODIS";
 	char* d_fields = "Data_Fields";
 	//Get all granule file names
-	printf("Retrieving granule group names");
+	printf("Retrieving granule group names\n");
 	hid_t group = H5Gopen(file, instrument, H5P_DEFAULT);
 	if(group < 0){
 		printf("Group not found\n");
@@ -229,14 +229,16 @@ double* get_modis_rad(hid_t file, char* resolution, char* d_name){
 	return data;
 }
 
-double* get_modis_lat(hid_t file, char* resolution){
+double* get_modis_lat(hid_t file, char* resolution, char* d_name){
 	printf("Reading MODIS lat\n");
 	//Path variables
 	char* instrument = "MODIS";
+	char* d_fields = "Data_Fields";
 	char* location = "Geolocation";
 	char* lat = "Latitude";
 	
 	//Get all granule file names
+	printf("Retrieving granule group names\n");
 	hid_t group = H5Gopen(file, instrument, H5P_DEFAULT);
 	if(group < 0){
 		printf("Group not found\n");
@@ -260,10 +262,22 @@ double* get_modis_lat(hid_t file, char* resolution){
 	for(h = 0; h < num_groups; h++){
 		//Path formation
 		char* name = names[h];
+		const char* d_arr[] = {name, resolution, d_fields, d_name};
+		char* dataset_name;
+		concat_by_sep(&dataset_name, d_arr, "/", strlen(name) + strlen(resolution) + strlen(d_fields) + strlen(d_name), 4);
+		memmove(&dataset_name[0], &dataset_name[1], strlen(dataset_name));
+		//Check if dataset exists first
+		printf("granule_name: %s\n", name);
+		htri_t status = H5Lexists(group, dataset_name, H5P_DEFAULT);
+		if(status <= 0){
+			printf("Dataset does not exist\n");
+			continue;
+		}
+		
 		const char* lat_arr[] = {instrument, name, resolution, location, lat};
 		char* lat_dataset_name;
 		concat_by_sep(&lat_dataset_name, lat_arr, "/", strlen(instrument) + strlen(name) + strlen(resolution) + strlen(location) + strlen(lat), 5);
-		printf("granule_name: %s\n", name);
+		
 		if(read_first < 0){
 			curr_lat_size = dim_sum(af_read_size(file, lat_dataset_name), 2);
 			lat_data = af_read(file, lat_dataset_name);
@@ -287,14 +301,16 @@ double* get_modis_lat(hid_t file, char* resolution){
 	printf("test_lat_data (next_granule): %f\n", lat_data[5510780]);
 	return lat_data;
 }
-double* get_modis_long(hid_t file, char* resolution){
+double* get_modis_long(hid_t file, char* resolution, char* d_name){
 	printf("Reading MODIS long\n");
 	//Path variables
 	char* instrument = "MODIS";
+	char* d_fields = "Data_Fields";
 	char* location = "Geolocation";
 	char* longitude = "Longitude";
 	
 	//Get all granule file names
+	printf("Retrieving granule group names\n");
 	hid_t group = H5Gopen(file, instrument, H5P_DEFAULT);
 	if(group < 0){
 		printf("Group not found\n");
@@ -318,10 +334,22 @@ double* get_modis_long(hid_t file, char* resolution){
 	for(h = 0; h < num_groups; h++){
 		//Path formation
 		char* name = names[h];
+		const char* d_arr[] = {name, resolution, d_fields, d_name};
+		char* dataset_name;
+		concat_by_sep(&dataset_name, d_arr, "/", strlen(name) + strlen(resolution) + strlen(d_fields) + strlen(d_name), 4);
+		memmove(&dataset_name[0], &dataset_name[1], strlen(dataset_name));
+		//Check if dataset exists first
+		printf("granule_name: %s\n", name);
+		htri_t status = H5Lexists(group, dataset_name, H5P_DEFAULT);
+		if(status <= 0){
+			printf("Dataset does not exist\n");
+			continue;
+		}
+		
 		const char* long_arr[] = {instrument, name, resolution, location, longitude};
 		char* long_dataset_name;
 		concat_by_sep(&long_dataset_name, long_arr, "/", strlen(instrument) + strlen(name) + strlen(resolution) + strlen(location) + strlen(longitude), 5);
-		printf("granule_name: %s\n", name);
+		
 		if(read_first < 0){
 			curr_long_size = dim_sum(af_read_size(file, long_dataset_name), 2);
 			long_data = af_read(file, long_dataset_name);
@@ -474,8 +502,8 @@ int main (int argc, char *argv[]){
 				printf("Wrong resolution, choose from 1KM, 500M or 250M\n");
 			}
 			double* data = get_modis_rad(file, resolution, d_name);
-			double* lat_data = get_modis_lat(file, resolution);
-			double* long_data = get_modis_long(file, resolution);
+			double* lat_data = get_modis_lat(file, resolution, d_name);
+			double* long_data = get_modis_long(file, resolution, d_name);
 			if(data != NULL && lat_data != NULL, long_data != NULL){
 				printf("MODIS retrieval successful\n");
 			}
