@@ -18,7 +18,7 @@
 #include <string.h>
 #define FALSE   0
 
-double* get_misr_rad(hid_t file, char* camera_angle, char* resolution, char* radiance, double* size){
+double* get_misr_rad(hid_t file, char* camera_angle, char* resolution, char* radiance, int* size){
 	//Path to dataset proccessing 
 	int down_sampling = 0;
 	char* instrument = "MISR";
@@ -102,7 +102,7 @@ double* get_misr_rad(hid_t file, char* camera_angle, char* resolution, char* rad
 	
 }
 
-double* get_misr_lat(hid_t file, char* resolution, double* size){
+double* get_misr_lat(hid_t file, char* resolution, int* size){
 	//Path to dataset proccessing 
 	char* instrument = "MISR";
 	char* location;
@@ -130,7 +130,7 @@ double* get_misr_lat(hid_t file, char* resolution, double* size){
 	return lat_data;
 }
 
-double* get_misr_long(hid_t file, char* resolution, double* size){
+double* get_misr_long(hid_t file, char* resolution, int* size){
 	//Path to dataset proccessing 
 	char* instrument = "MISR";
 	char* location;
@@ -158,7 +158,7 @@ double* get_misr_long(hid_t file, char* resolution, double* size){
 	return long_data;
 }
 
-double* get_modis_rad(hid_t file, char* resolution, char* d_name, double* size){
+double* get_modis_rad(hid_t file, char* resolution, char* d_name, int* size){
 	printf("Reading MODIS rad\n");
 	char* instrument = "MODIS";
 	char* d_fields = "Data_Fields";
@@ -222,7 +222,7 @@ double* get_modis_rad(hid_t file, char* resolution, char* d_name, double* size){
 	return data;
 }
 
-double* get_modis_lat(hid_t file, char* resolution, char* d_name, double* size){
+double* get_modis_lat(hid_t file, char* resolution, char* d_name, int* size){
 	printf("Reading MODIS lat\n");
 	//Path variables
 	char* instrument = "MODIS";
@@ -291,12 +291,12 @@ double* get_modis_lat(hid_t file, char* resolution, char* d_name, double* size){
 	}
 	*size = curr_lat_size;
 	
-	printf("test_lat_data (next_granule): %f\n", lat_data[0]);
-	printf("test_lat_data (next_granule): %f\n", lat_data[2748620]);
-	printf("test_lat_data (next_granule): %f\n", lat_data[5510780]);
+	printf("test_lat_data: %f\n", lat_data[0]);
+	printf("test_lat_data: %f\n", lat_data[2748620]);
+	printf("test_lat_data: %f\n", lat_data[5510780]);
 	return lat_data;
 }
-double* get_modis_long(hid_t file, char* resolution, char* d_name, double* size){
+double* get_modis_long(hid_t file, char* resolution, char* d_name, int* size){
 	printf("Reading MODIS long\n");
 	//Path variables
 	char* instrument = "MODIS";
@@ -365,13 +365,13 @@ double* get_modis_long(hid_t file, char* resolution, char* d_name, double* size)
 	}
 	*size = curr_long_size;
 	
-	printf("test_long_data (next_granule): %f\n", long_data[0]);
-	printf("test_long_data (next_granule): %f\n", long_data[2748620]);
-	printf("test_long_data (next_granule): %f\n", long_data[5510780]);
+	printf("test_long_data: %f\n", long_data[0]);
+	printf("test_long_data: %f\n", long_data[2748620]);
+	printf("test_long_data: %f\n", long_data[5510780]);
 	return long_data;
 }
 
-double* get_ceres_rad(hid_t file, char* camera, char* d_name, double* size){
+double* get_ceres_rad(hid_t file, char* camera, char* d_name, int* size){
 	printf("Reading CERES radiance\n");
 	//Path variables
 	char* instrument = "CERES";
@@ -404,13 +404,12 @@ double* get_ceres_rad(hid_t file, char* camera, char* d_name, double* size){
 		char* dataset_name;
 		concat_by_sep(&dataset_name, d_arr, "/", strlen(instrument) + strlen(name) + strlen(camera) + strlen(rad) + strlen(d_name), 5);
 		printf("granule_name: %s\n", name);
-		printf("ds_name: %s\n", dataset_name);
 		if(read_first < 0){
 			data = af_read(file, dataset_name);
 			if(data == NULL){
 				continue;
 			}
-			curr_size = dim_sum(af_read_size(file, dataset_name), 3); 
+			curr_size = dim_sum(af_read_size(file, dataset_name), 1); 
 			read_first = 1;
 		}
 		else{
@@ -419,8 +418,7 @@ double* get_ceres_rad(hid_t file, char* camera, char* d_name, double* size){
 			if(adding_data == NULL){
 				continue;
 			}
-			double new_d_size = dim_sum(af_read_size(file, dataset_name), 3);
-			
+			double new_d_size = dim_sum(af_read_size(file, dataset_name), 1);
 			//Reallocating arrays of data
 			data = realloc(data, sizeof(double)*(curr_size + new_d_size));
 			memcpy(&data[(int)curr_size], adding_data, sizeof(double)*new_d_size);
@@ -429,11 +427,161 @@ double* get_ceres_rad(hid_t file, char* camera, char* d_name, double* size){
 			free(adding_data);
 		}
 	}
+	*size = curr_size;
+	
 	//Print statements to verify data's existence	
 	printf("test data: %f\n", data[0]);
 	printf("test_data: %f\n", data[1]);
 	printf("test data: %f\n", data[2]);
 	return data;
+}
+
+double* get_ceres_lat(hid_t file, char* camera, char* d_name, int* size){
+	printf("Reading CERES lat\n");
+	//Path variables
+	char* instrument = "CERES";
+	char* rad = "Radiances";
+	char* tp = "Time_and_Position";
+	char* lat = "Latitude";
+	
+	//Get all granule file names
+	printf("Retrieving granule group names\n");
+	hid_t group = H5Gopen(file, instrument, H5P_DEFAULT);
+	if(group < 0){
+		printf("Group not found\n");
+		return NULL;
+	}
+	hsize_t num_groups;
+	herr_t err = H5Gget_num_objs(group, &num_groups);
+	char* names[(int)num_groups][20];
+	int i;
+	for(i = 0; i < num_groups; i++){
+		char* name = malloc(20*sizeof(char));
+		H5Gget_objname_by_idx(group, (hsize_t)i, name, 20);
+		strcpy(&names[i], name);
+		free(name);
+	}
+	int h;
+	double* lat_data;
+	double curr_lat_size;
+	int read_first = -1;
+	for(h = 0; h < num_groups; h++){
+		//Path formation
+		char* name = names[h];
+		const char* d_arr[] = {name, camera, rad, d_name};
+		char* dataset_name;
+		concat_by_sep(&dataset_name, d_arr, "/", strlen(name) + strlen(camera) + strlen(rad) + strlen(d_name), 4);
+		memmove(&dataset_name[0], &dataset_name[1], strlen(dataset_name));
+		//Check if dataset exists first
+		printf("granule_name: %s\n", name);
+		htri_t status = H5Lexists(group, dataset_name, H5P_DEFAULT);
+		if(status <= 0){
+			printf("Dataset does not exist\n");
+			continue;
+		}
+		
+		const char* lat_arr[] = {instrument, name, camera, tp, lat};
+		char* lat_dataset_name;
+		concat_by_sep(&lat_dataset_name, lat_arr, "/", strlen(instrument) + strlen(name) + strlen(camera) + strlen(tp) + strlen(lat), 5);
+		
+		if(read_first < 0){
+			curr_lat_size = dim_sum(af_read_size(file, lat_dataset_name), 1);
+			lat_data = af_read(file, lat_dataset_name);
+			read_first = 1;
+		}
+		else{
+			//retrieve next set of data and it's dimention
+			double* adding_lat = af_read(file, lat_dataset_name);
+			double new_lat_size = dim_sum(af_read_size(file, lat_dataset_name), 1);
+			
+			//Reallocating arrays of data
+			lat_data = realloc(lat_data, sizeof(double)*(curr_lat_size + new_lat_size));
+			memcpy(&lat_data[(int)curr_lat_size], adding_lat, sizeof(double)*new_lat_size);
+			curr_lat_size += new_lat_size;
+			
+			free(adding_lat);
+		}
+	}
+	*size = curr_lat_size;
+	//Print statements to verify data's existence
+	printf("test_lat_data: %f\n", lat_data[0]);
+	printf("test_lat_data: %f\n", lat_data[1]);
+	printf("test_lat_data: %f\n", lat_data[2]);
+	
+	return lat_data;
+}
+
+double* get_ceres_long(hid_t file, char* camera, char* d_name, int* size){
+	printf("Reading CERES long\n");
+	//Path variables
+	char* instrument = "CERES";
+	char* rad = "Radiances";
+	char* tp = "Time_and_Position";
+	char* longitude = "Longitude";
+	
+	//Get all granule file names
+	printf("Retrieving granule group names\n");
+	hid_t group = H5Gopen(file, instrument, H5P_DEFAULT);
+	if(group < 0){
+		printf("Group not found\n");
+		return NULL;
+	}
+	hsize_t num_groups;
+	herr_t err = H5Gget_num_objs(group, &num_groups);
+	char* names[(int)num_groups][20];
+	int i;
+	for(i = 0; i < num_groups; i++){
+		char* name = malloc(20*sizeof(char));
+		H5Gget_objname_by_idx(group, (hsize_t)i, name, 20);
+		strcpy(&names[i], name);
+		free(name);
+	}
+		int h;
+	double* long_data;
+	double curr_long_size;
+	int read_first = -1;
+	for(h = 0; h < num_groups; h++){
+		//Path formation
+		char* name = names[h];
+		const char* d_arr[] = {name, camera, rad, d_name};
+		char* dataset_name;
+		concat_by_sep(&dataset_name, d_arr, "/", strlen(name) + strlen(camera) + strlen(rad) + strlen(d_name), 4);
+		memmove(&dataset_name[0], &dataset_name[1], strlen(dataset_name));
+		//Check if dataset exists first
+		printf("granule_name: %s\n", name);
+		htri_t status = H5Lexists(group, dataset_name, H5P_DEFAULT);
+		if(status <= 0){
+			printf("Dataset does not exist\n");
+			continue;
+		}
+		
+		const char* long_arr[] = {instrument, name, camera, tp, longitude};
+		char* long_dataset_name;
+		concat_by_sep(&long_dataset_name, long_arr, "/", strlen(instrument) + strlen(name) + strlen(camera) + strlen(tp) + strlen(longitude), 5);
+		
+		if(read_first < 0){
+			curr_long_size = dim_sum(af_read_size(file, long_dataset_name), 1);
+			long_data = af_read(file, long_dataset_name);
+			read_first = 1;
+		}
+		else{
+			//retrieve next set of data and it's dimention
+			double* adding_long = af_read(file, long_dataset_name);
+			double new_long_size = dim_sum(af_read_size(file, long_dataset_name), 1);
+			//Reallocating arrays of data
+			long_data = realloc(long_data, sizeof(double)*(curr_long_size + new_long_size));
+			memcpy(&long_data[(int)curr_long_size], adding_long, sizeof(double)*new_long_size);
+			curr_long_size += new_long_size;
+
+			free(adding_long);
+		}
+	}
+	*size = curr_long_size;
+	
+	printf("test_long_data: %f\n", long_data[0]);
+	printf("test_long_data: %f\n", long_data[1]);
+	printf("test_long_data: %f\n", long_data[2]);
+	return long_data;
 }
 
 hsize_t* af_read_size(hid_t file, char* dataset_name){
@@ -448,9 +596,7 @@ hsize_t* af_read_size(hid_t file, char* dataset_name){
 		return NULL;	
 	}
 	const int ndims = H5Sget_simple_extent_ndims(dataspace);
-	//printf("ndims: %d\n", ndims);
 	hsize_t* dims = malloc(sizeof(hsize_t) * ndims);
-	//printf("dims: %d\n", dims[0]);
 	H5Sget_simple_extent_dims(dataspace, dims, NULL);
 	H5Dclose(dataset);	
 	H5Sclose(dataspace);
@@ -526,20 +672,20 @@ int main (int argc, char *argv[]){
 				printf("File not found\n");
 				return -1;
 			}
-			double d_size = 0;
-			double* data_pt = &d_size;
-			double* data = get_misr_rad(file, argv[3], argv[4], argv[5], data_pt);
-			printf("Data size: %f\n", *data_pt);
+			int d_size = 0;
+			int* data_pt = &d_size;
+			int* data = get_misr_rad(file, argv[3], argv[4], argv[5], data_pt);
+			printf("Data size: %d\n", *data_pt);
 			
-			double lat_size = 0;
-			double* lat_pt = &lat_size;
+			int lat_size = 0;
+			int* lat_pt = &lat_size;
 			double* lat_data = get_misr_lat(file, argv[4], lat_pt);
-			printf("Lat size: %f\n", *lat_pt);
+			printf("Lat size: %d\n", *lat_pt);
 			
-			double long_size = 0;
-			double* long_pt = &long_size;
+			int long_size = 0;
+			int* long_pt = &long_size;
 			double* long_data = get_misr_long(file, argv[4], long_pt);
-			printf("Long size: %f\n", *long_pt);
+			printf("Long size: %d\n", *long_pt);
 			
 			if(data != NULL && lat_data != NULL, long_data != NULL){
 				printf("MISR retrieval successful\n");
@@ -577,20 +723,20 @@ int main (int argc, char *argv[]){
 			else{
 				printf("Wrong resolution, choose from 1KM, 500M or 250M\n");
 			}
-			double data_size = 0;
-			double* data_pt = &data_size;
+			int data_size = 0;
+			int* data_pt = &data_size;
 			double* data = get_modis_rad(file, resolution, d_name, data_pt);
-			printf("Data size: %f\n", *data_pt);
+			printf("Data size: %d\n", *data_pt);
 			
-			double lat_size = 0;
-			double* lat_pt = &lat_size;
+			int lat_size = 0;
+			int* lat_pt = &lat_size;
 			double* lat_data = get_modis_lat(file, resolution, d_name, lat_pt);
-			printf("Lat size: %f\n", *lat_pt);
+			printf("Lat size: %d\n", *lat_pt);
 			
-			double long_size = 0;
-			double* long_pt = &long_size;
+			int long_size = 0;
+			int* long_pt = &long_size;
 			double* long_data = get_modis_long(file, resolution, d_name, long_pt);
-			printf("Long size: %f\n", *long_pt);
+			printf("Long size: %d\n", *long_pt);
 			
 			if(data != NULL && lat_data != NULL, long_data != NULL){
 				printf("MODIS retrieval successful\n");
@@ -624,10 +770,21 @@ int main (int argc, char *argv[]){
 					strcpy(d_name, argv[4]);
 					strncat(d_name, r, strlen(r));
 				}
-				double data_size = 0;
-				double* data_pt = &data_size;
+				
+				int data_size = 0;
+				int* data_pt = &data_size;
 				double* data = get_ceres_rad(file, argv[3], d_name, data_pt);
-				printf("Data size: %f\n", data_pt);
+				printf("Data size: %d\n", *data_pt);
+				
+				int lat_size = 0;
+				int* lat_pt = &lat_size;
+				double* lat_data = get_ceres_lat(file, argv[3], d_name, lat_pt);
+				printf("Lat size: %d\n", *lat_pt);
+
+				int long_size = 0;
+				int* long_pt = &long_size;
+				double* long_data = get_ceres_long(file, argv[3], d_name, long_pt);
+				printf("Long size: %d\n", *long_pt);
 		}
 	}
 	
