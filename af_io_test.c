@@ -674,7 +674,7 @@ int main (int argc, char *argv[]){
 			}
 			int d_size = 0;
 			int* data_pt = &d_size;
-			int* data = get_misr_rad(file, argv[3], argv[4], argv[5], data_pt);
+			double* data = get_misr_rad(file, argv[3], argv[4], argv[5], data_pt);
 			printf("Data size: %d\n", *data_pt);
 			
 			int lat_size = 0;
