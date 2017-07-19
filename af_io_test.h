@@ -27,12 +27,20 @@ hsize_t* af_read_size(hid_t file, char* dataset_name);
 double* get_misr_rad(hid_t file, char* camera_angle, char* resolution, char* radiance, int* size);
 double* get_misr_lat(hid_t file, char* resolution, int* size);
 double* get_misr_long(hid_t file, char* resolution, int* size);
+void* get_misr_attr(hid_t file, char* camera_angle, char* resolution, char* radiance, char* attr_name, int geo, void* attr_pt);
 double* get_modis_rad(hid_t file, char* resolution, char* d_name, int* size);
 double* get_modis_lat(hid_t file, char* resolution, char* d_name, int* size);
 double* get_modis_long(hid_t file, char* resolution, char* d_name, int* size);
+double* get_modis_attr(hid_t file, char* resolution, char* d_name, char* attr_name, int geo, void* attr_pt);
 double* get_ceres_rad(hid_t file, char* camera, char* d_name, int* size);
 double* get_ceres_lat(hid_t file, char* camera, char* d_name, int* size);
 double* get_ceres_long(hid_t file, char* camera, char* d_name, int* size);
+double* get_mop_rad(hid_t file, int* size);
+double* get_mop_lat(hid_t file, int*size);
+double* get_mop_long(hid_t file, int* size);
+double* get_ast_rad(hid_t file, char* subsystem, char* d_name, int*size);
+double* get_ast_lat(hid_t file, char* subsystem, char* d_name, int*size);
+double* get_ast_long(hid_t file, char* subsystem, char* d_name, int*size);
 
 //Helper functions
 void concat_by_sep(char** source, const char** w, char* sep, size_t length, int arr_size);
