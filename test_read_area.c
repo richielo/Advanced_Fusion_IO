@@ -28,7 +28,7 @@ int main(int argc, char ** argv) {
 		exit(1);
 	}
 	
-	char* m_250_list[2] = {"1", "2"};
+	/*char* m_250_list[2] = {"1", "2"};
 		char* m_500_list[5] = {"3", "4", "5", "6", "7"};
 	char* km_1_ref_list[15] = {"8", "9", "10", "11", "12", "13L", "13H", "14L", "14H", "15", "16", "17", "18", "19", "26"};
 	char* kme_1_list[16] = {"20", "21", "22", "23", "24", "25", "27", "28", "29", "30", "31", "32", "33", "34", "35", "36"};
@@ -42,7 +42,12 @@ int main(int argc, char ** argv) {
 		double * MODIS_rad = get_modis_rad_by_band(file, "_1KM", d_name, &band_index, &file_size);
 		printf("MODIS_rad: %f\n", MODIS_rad[0]);
 		printf("MODIS_rad: %f\n", MODIS_rad[2748620]);
-	}
+	}*/
+	char* bands[5] = {"8", "9", "12", "14L", "20"};
+	int size;
+	double* modis_test = get_modis_rad(file, "_1KM", bands, 5, &size);
+	
+	printf("test size: %d\n", size);
 	
 	herr_t ret = af_close(file);
 

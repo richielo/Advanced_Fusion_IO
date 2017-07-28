@@ -213,8 +213,10 @@ void* get_misr_attr(hid_t file, char* camera_angle, char* resolution, char* radi
 	return attr_pt;
 }
 
-double* get_modis_rad(hid_t file, char* resolution, char* d_name, int* size){
+double* get_modis_rad(hid_t file, char* resolution, char* bands[], int band_size, int* size){
 	printf("Reading MODIS rad\n");
+	
+	//Path variables
 	char* instrument = "MODIS";
 	char* d_fields = "Data_Fields";
 	//Get all granule file names
@@ -226,87 +228,67 @@ double* get_modis_rad(hid_t file, char* resolution, char* d_name, int* size){
 	}
 	hsize_t num_groups;
 	herr_t err = H5Gget_num_objs(group, &num_groups);
-	char* names[(int)num_groups][20];
+	char* names[(int)num_groups][50];
 	int i;
 	for(i = 0; i < num_groups; i++){
-		char* name = malloc(20*sizeof(char));
-		H5Gget_objname_by_idx(group, (hsize_t)i, name, 20);
+		char* name = malloc(50*sizeof(char));
+		H5Gget_objname_by_idx(group, (hsize_t)i, name, 50);
 		strcpy(&names[i], name);
 		free(name);
 	}
 	
-	//Bands
-	double* band1;
-	double* band2;
-	double* band3;
-	double* band4;
-	double* band5;
-	double* band6;
-	double* band7;
-	double* band8;
-	double* band9;
-	double* band10;
-	double* band11;
-	double* band12;
-	double* band13;
-	double* band14;
-	double* band15;
-	double* bands[15] = {band1, band2, band3, band4, band5, band6, band7, band8, band9, band10, band11, band12, band13, band14, band15};
-	double band_sizes[15] = {0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0};
-	
-	double* result_data;
-	int h;
-	double curr_size;
-	int read_first = -1;
-	int num_bands = 15;
-	for(h = 0; h < num_groups; h++){
-		double* data;
-		//Path formation
-		char* name = names[h];
-		const char* d_arr[] = {instrument, name, resolution, d_fields, d_name};
-		char* dataset_name;
-		concat_by_sep(&dataset_name, d_arr, "/", strlen(instrument) + strlen(name) + strlen(resolution) + strlen(d_fields) + strlen(d_name), 5);
-		printf("granule_name: %s\n", name);
-		data = af_read(file, dataset_name);
-		if(data == NULL){
-			continue;
+	//Get dataset names from bands
+	printf("Retreving dataset names\n");
+	char* dnames[band_size][50];
+	int band_indices[band_size];
+	int j;
+	for(j = 0; j < band_size; j++){
+		char* dname = get_modis_filename(resolution, bands[j], &band_indices[j]);
+		if(dname == NULL){
+			printf("Band %s is not supported for %s resolution\n", bands[j], resolution);
+			return NULL;
 		}
-		curr_size += dim_sum(af_read_size(file, dataset_name), 3); 
-		hsize_t* curr_dim = af_read_size(file, dataset_name);
-		//printf("dim 0 %d\n", (int)curr_dim[0]); ---- 15 
-		//printf("dim 1 %d\n", (int)curr_dim[1]);-------2030
-		//printf("dim 2 %d\n", (int)curr_dim[2]);----1354
-		
-		int u;
-		for(u = 0; u < num_bands; u++){
-			int start_point = u * curr_dim[1] * curr_dim[2];
-			if(read_first == -1){
-				bands[u] = calloc(curr_dim[1]*curr_dim[2], sizeof(double));
-				memcpy(bands[u], &data[start_point], sizeof(double)*curr_dim[1]*curr_dim[2]);
-				band_sizes[u] += curr_dim[1]*curr_dim[2];
-			}
-			else{
-				bands[u] = realloc(bands[u], sizeof(double) * (band_sizes[u] + curr_dim[1]*curr_dim[2]));
-				memcpy(bands[u]+(int)band_sizes[u], &data[start_point], sizeof(double)*curr_dim[1]*curr_dim[2]);
-				band_sizes[u] += curr_dim[1]*curr_dim[2];
-			}
-		}
-		read_first = 1;
+		printf("dname: %s\n", dname);
+		strcpy(&dnames[j], dname);
 	}
-	*size = curr_size;
 	
-	//Line bands data together
-	printf("curr_size: %f\n", curr_size);
-	result_data = calloc(curr_size, sizeof(double));
-	double copy_size = 0;
+	
+	//Get total data size
+	printf("Get total data size\n");
 	int k;
-	for(k = 0; k < num_bands; k++){
-		memcpy(result_data + (int)copy_size, bands[k], band_sizes[k]*sizeof(double));
-		copy_size += band_sizes[k];
+	int m;
+	int total_size = 0;
+	for(m = 0; m < band_size; m++){
+		for(k = 0; k < num_groups; k++){
+			char* name = names[k];
+			const char* d_arr[] = {instrument, name, resolution, d_fields, dnames[m]};
+			char* dataset_name;
+			concat_by_sep(&dataset_name, d_arr, "/", strlen(instrument) + strlen(name) + strlen(resolution) + strlen(d_fields) + strlen(dnames[m]), 5);
+			hsize_t* curr_dim = af_read_size(file, dataset_name);
+			if(curr_dim == NULL){
+				continue;
+			}
+			total_size += curr_dim[1]*curr_dim[2];
+		}
 	}
 	
-	assert(curr_size == copy_size);
-	printf("Size validated\n");
+	double* result_data = calloc(total_size, sizeof(double));
+	int start_point = 0;
+	
+	//Start reading data
+	int n;
+	for(n = 0; n < band_size; n++){
+		int file_size;
+		double * MODIS_rad = get_modis_rad_by_band(file, resolution, &dnames[n], &band_indices[n], &file_size);
+		memcpy(&result_data[start_point], MODIS_rad, file_size);
+		start_point += file_size;
+	}
+	
+	if(total_size == start_point){
+		printf("Final size validated\n");
+	}
+	
+	*size = total_size;
 	
 	return result_data;
 }

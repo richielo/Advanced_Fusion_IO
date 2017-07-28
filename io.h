@@ -30,7 +30,7 @@ double* get_misr_rad(hid_t file, char* camera_angle, char* resolution, char* rad
 double* get_misr_lat(hid_t file, char* resolution, int* size);
 double* get_misr_long(hid_t file, char* resolution, int* size);
 void* get_misr_attr(hid_t file, char* camera_angle, char* resolution, char* radiance, char* attr_name, int geo, void* attr_pt);
-double* get_modis_rad(hid_t file, char* resolution, char* d_name, int* size);
+double* get_modis_rad(hid_t file, char* resolution, char* bands[], int band_size, int* size);
 double* get_modis_rad_by_band(hid_t file, char* resolution, char* d_name, int* band_index, int* size);
 double* get_modis_lat(hid_t file, char* resolution, char* d_name, int* size);
 double* get_modis_long(hid_t file, char* resolution, char* d_name, int* size);

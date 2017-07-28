@@ -12,7 +12,9 @@ testRepro3.o: testRepro3.c
 testReproHDF5.o: testReproHDF5.c
 	$(H5CC) -c $< -o $@ 
 test_read_area.o: test_read_area.c
-    $(H5CC) -c $< -o $@
+	$(H5CC) -c $< -o $@
+af_run.o: af_run.c
+	$(H5CC) -c $< -o $@
 reproject.o: reproject.c
 	$(CC) -o $@ -c $<
 io.o: io.c
@@ -26,6 +28,8 @@ testRepro3: testRepro3.o reproject.o
 testReproHDF5: testReproHDF5.o reproject.o io.o
 	$(H5CC) -o ../$@ $+ -lm
 test_read_area: test_read_area.o reproject.o io.o
-    $(H5CC) -o ../$@ $+ -lm
+	$(H5CC) -o ../$@ $+ -lm
+af_run: af_run.o reproject.o io.o
+	$(H5CC) -o ../$@ $+ -lm
 clean:
 	rm *.o ../testRepro ../testRepro2 ../testRepro3 ../testReproHDF5
